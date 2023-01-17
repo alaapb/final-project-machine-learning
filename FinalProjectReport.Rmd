@@ -1,0 +1,356 @@
+---
+title: "FinalProjectReport"
+output: html_document
+date: "2022-12-07"
+---
+
+
+```{r include=FALSE}
+getwd()
+setwd("/Users/alaapbharadwaj/desktop/CS555")
+library("dplyr")
+library("corrplot")
+require("scatterplot3d")
+library("ggstatsplot")
+library("tidyverse")
+library("rstatix")
+library("ggpubr")
+library("olsrr")
+```
+
+# Loading Dataset
+```{r loading}
+df <- read.csv("taxitripdata.csv")
+```
+
+# Exploring Dataset
+
+```{r exploring}
+summary(df)
+
+head(df)
+```
+
+Creating new column to describe exact time taken for a trip since pickup and dropoff are in datetime format  
+Keep in mind the column being added, timeTaken, has units of minutes  
+
+```{r}
+df$timeTaken <- paste(difftime(df$tpep_dropoff_datetime,df$tpep_pickup_datetime, units="mins"))
+df$timeTaken <- as.numeric(df$timeTaken)
+head(df)
+```
+
+We will be dropping some columns as they are all IDs and will not help in the model since they are categorical variables  
+```{r}
+new_df <- df %>% select(-c(store_and_fwd_flag, tpep_pickup_datetime, tpep_dropoff_datetime, PULocationID, DOLocationID, VendorID, RatecodeID, payment_type))
+```
+
+# Outlier Handling
+
+```{r}
+boxplot(new_df)
+```
+
+We have now plotted our dataset, so we will remove our outliers first and then choose our sample size  
+With the boxplot we can see which variables have outliers and now we will remove them all  
+```{r outliers}
+new_df <- new_df[-which(new_df$timeTaken %in% boxplot.stats(new_df$timeTaken)$out), ]
+new_df <- new_df[-which(new_df$fare_amount %in% boxplot.stats(new_df$fare_amount)$out), ]
+new_df <- new_df[-which(new_df$trip_distance %in% boxplot.stats(new_df$trip_distance)$out), ]
+new_df <- new_df[-which(new_df$total_amount %in% boxplot.stats(new_df$total_amount)$out), ]
+new_df <- new_df[-which(new_df$tolls_amount %in% boxplot.stats(new_df$tolls_amount)$out), ]
+new_df <- new_df[-which(new_df$passenger_count %in% boxplot.stats(new_df$passenger_count)$out), ]
+new_df <- new_df[-which(new_df$mta_tax %in% boxplot.stats(new_df$mta_tax)$out), ]
+new_df <- new_df[-which(new_df$tip_amount %in% boxplot.stats(new_df$tip_amount)$out), ]
+new_df <- new_df[-which(new_df$airport_fee %in% boxplot.stats(new_df$airport_fee)$out), ]
+new_df <- new_df[-which(new_df$congestion_surcharge %in% boxplot.stats(new_df$congestion_surcharge)$out), ]
+
+boxplot(new_df)
+```
+
+We can see from this that the majority of outliers have been removed, now we can go ahead with our investigation  
+
+## Choosing first 500 rows
+```{r}
+complete_df <- head(new_df, 500)
+
+summary(complete_df)
+
+attach(complete_df)
+```
+
+# Scatter Plot
+```{r}
+pairs(complete_df, upper.panel=NULL)
+```
+This output shows:  
+Some linear relationship between trip distance and time taken  
+No Linear relationship between passenger count and time taken, airport fee and time taken, congestion surhcarge and time taken, improvement surcharge and time taken, tolls amount and time taken, mta tax and time taken, extra and time taken  
+Some Linear relationship between tip amount and time taken, but with some noise  
+Strong Linear relationship between total amount and time taken, fare amount and time taken  
+
+We can also get a closer look at the ones we think is linear from the initial plot  
+
+#### trip distance and time taken
+```{r}
+plot(complete_df$trip_distance, complete_df$timeTaken)
+```
+
+We can confirm that is relationship is linear  
+
+#### total amount and time taken
+```{r}
+plot(complete_df$total_amount, complete_df$timeTaken)
+```
+
+We can confirm that this is also linear  
+
+#### fare amount and time taken
+```{r}
+plot(complete_df$fare_amount, complete_df$timeTaken)
+```
+
+We can see that there is a strong linear relationship  
+
+#### tip amount and time taken
+```{r}
+plot(complete_df$tip_amount, complete_df$timeTaken)
+```
+We can see that there is a very slight linear relationship while there is a lot of noise  
+
+# Testing
+
+## Simple Linear Regression
+
+### Trip Distance to Time Taken Linear Regression
+#### Model
+Now we will create the linear model and then print out a summary to check the R-squared and p-value to check the goodness of this model  
+```{r}
+lmdistance <- lm(timeTaken~trip_distance, data=complete_df)
+summary(lmdistance)
+```
+
+We can see that:  
+p-value is < 0.05, therefore, it shows that the variable is significant  
+slope and intercept p-value is < 0.05, therefore, it is clear both coefficients is significant  
+this model with distance as predictor explains about 61.3% variability of the target  
+residual standard error is 4.135  
+
+### Total Amount to Time Taken Linear Regression
+#### Model
+```{r}
+lmamount <- lm(timeTaken~total_amount, data=complete_df)
+summary(lmamount)
+```
+
+We can see that:  
+p-value is < 0.05, therefore, it shows that the variable is significant  
+slope and intercept p-value is < 0.05, therefore, it is clear both coefficients is significant  
+this model with total amount as predictor explains about 80% variability of the target  
+residual standard error is 2.934  
+
+### Fare Amount to Time Taken Simple Linear Regression
+#### Model
+```{r}
+lmfare <- lm(timeTaken~fare_amount, data=complete_df)
+summary(lmfare)
+```
+
+We can see that:  
+p-value is < 0.05, therefore, it shows that the variable is significant  
+slope and intercept p-value is < 0.05, therefore, it is clear both coefficients is significant  
+this model with fare amount as predictor explains about 86% variability of the target  
+residual standard error is 2.469  
+
+### Tip Amount to Time Taken Simple Linear Regression
+#### Model
+```{r}
+lmtip <- lm(timeTaken~tip_amount, data=complete_df)
+summary(lmtip)
+```
+
+We can see that:  
+p-value is < 0.05, therefore, it shows that the variable is significant  
+slope and intercept p-value is < 0.05, therefore, it is clear both coefficients is significant  
+this model with fare amount as predictor explains about 12% variability of the target, meaning it does not do a good job in predicting the time taken value  
+residual standard error is 6.238  
+
+From the Simple Linear Regressions that we ran above, we can say the fare amount gave us the best variability so we will plot the scatterplot along with the regression line  
+```{r}
+plot(fare_amount, timeTaken)
+
+abline(lmfare, col="blue")
+```
+As you can see the line does not fully explain the variability within time taken, so maybe we could try multiple linear regression and see if more predictors help improve the line  
+
+### Correlation
+
+```{r}
+res <- cor.test(timeTaken, tip_amount)
+res
+```
+correlation is 0.349, since the correlation is not high we can say that this won't create a lot of noise  
+
+
+```{r}
+res <- cor.test(timeTaken, trip_distance)
+res
+```
+correlation of 0.783 means this variable could cause a lot of noise  
+
+```{r}
+res <- cor.test(timeTaken, fare_amount)
+res
+```
+We get a correlation of 0.929 so we can say it can cause a lot of noise as well  
+
+```{r}
+res <- cor.test(timeTaken, total_amount)
+res
+```
+The correlation for this is 0.898 so it will have a lot of noise when added to the model  
+
+After running the correlation tests, we can see what correlation we get, while some are high this could cause noise in our MLR model or it could help make it more accurate  
+
+### Check for Multi-Colinearity
+```{r}
+res <- cor.test(fare_amount, tip_amount)
+res
+```
+We get a correlation of 0.363 therefore it should not have a lot of noise when added together  
+
+```{r}
+res <- cor.test(fare_amount, total_amount)
+res
+```
+We get a correlation of 0.962 therefore this could create a lot of noise when added together in the model  
+
+```{r}
+res <- cor.test(fare_amount, trip_distance)
+res
+```
+We get a correlation of 0.928 therefore this could create a lot of noise when added together in the model  
+
+```{r}
+res <- cor.test(total_amount, tip_amount)
+res
+```
+We get a correlation of 0.604 therefore this could create noise as well within our model  
+
+```{r}
+res <- cor.test(total_amount, trip_distance)
+res
+```
+We get a correlation of 0.890 therefore this could create a lot of noise as well within our model  
+
+```{r}
+res <- cor.test(trip_distance, tip_amount)
+res
+```
+We get a correlation of 0.326 therefore there is less chances of this creating noise in our model  
+
+We can see that some of the correlation values are high which could mean when added to a multiple linear regression model it could add a lot of noise, however, it could also not add noise but rather help the significance of the model instead  
+
+## Multiple Linear Regression
+Now that we have created our linear regression models, cleaned our data, and identified which variables are significant and have linear relationship with the time taken  
+We will create the multiple regression model by adding different variables and seeing how the p-value is affected so that we create a model with the least p-value and a good r-squared value as well  
+
+### Fare Amount + Total Amount
+#### Model
+```{r}
+lm_fare_total = lm(timeTaken~fare_amount+ total_amount, data=complete_df)
+summary(lm_fare_total)
+```
+p-value < 0.05, therefore, the model is significant  
+p-value of coefficients for the intercept and the fare amount is < 0.05, however, total amount coefficient is > 0.05  
+The model for fare amount and total amount explains a 86% variability of time taken, however, this is lower than the variability shown in the simple linear regression by just the fare amount  
+residual standard error is 2.469  
+therefore we will not add total amount to the model since it reduces the variability  
+
+### Fare Amount + Trip Distance
+#### Model
+```{r}
+lm_fare_trip = lm(timeTaken~fare_amount+trip_distance, data=complete_df)
+summary(lm_fare_trip)
+```
+p-value < 0.05, therefore, the model is significant  
+p-value for all the coefficients is < 0.05, meaning that the slope and intercept coefficients are statistically significant  
+This model with fare amount and trip distance explains about 90.6% variability of time taken  
+residual standard error is 2.037  
+this is model is showing us good results, maybe we could try adding another variable to the model and see how it responds  
+
+#### Anova
+Now we must test whether the improvement in variability in Adjusted R squared is significant or not  
+We can test this by using ANOVA, having a null hypothesis as improvement in adjusted r squared is not statistically significant, and the alternative hypothesis is the improvement in adjusted r squared is statistically significant  
+```{r}
+anova(lmfare, lm_fare_trip)
+```
+the p-value from the anova shows us that we can reject the null hypothesis and accept the alternative hypothesis  
+so the improvement for the adjusted r squared is statistically significant  
+
+### Fare Amount + Trip Distance + Tip Amount
+#### Model
+```{r}
+lm_fare_trip_tip = lm(timeTaken~fare_amount+trip_distance+tip_amount, data=complete_df)
+summary(lm_fare_trip_tip)
+```
+p-value < 0.05, therefore, the model is statistically significant  
+p-value for some of the coefficients is < 0.05, meaning that the slope and intercept coefficients are statistically significant, p-value for tip amount is not below 0.05    
+This model with fare amount, trip distance and tip amount explains about 90.6% variability of time taken which is slightly higher than the model with trip distance and fare amount  
+This variability is higher than the previous model, therefore, making the model slightly more accurate  
+residual standard error is 2.039  
+Due to the p-value for tip amount coefficient we will not consider this model and since the r squared is the same we will not make the model more complex for no reason  
+
+### Fare Amount + Trip Distance + Total Amount
+#### Model
+```{r}
+lm_fare_trip_total = lm(timeTaken~fare_amount+trip_distance+total_amount, data=complete_df)
+summary(lm_fare_trip_total)
+```
+p-value < 0.05, therefore, the model is statistically significant  
+p-value for some the coefficients (slope and intercept) is < 0.05, therefore, making them significant, while the coefficients for total amount is > 0.05  
+This model with fare amount, total amount, tip amount, trip distance explains about 90.6% variability of time taken  
+residual standard error is 2.038 which is lower than the previous model as well  
+Due to the p-value of the coefficients we get the same r squared, therefore, we will not go forward with this model but take the model with the lower amount of variables since we do not want to make it more complex
+
+### Residual Plot
+#### Checking Linearity Assumption
+```{r}
+plot(lm_fare_trip, 1)
+```
+The red line is pretty much horizontal indicating that the linearity assumption holds well  
+Residual fluctuates between the -7 to 7 bound, which shows the fitted model is good prediction to a certain extent  
+Since we have a few points outside the bounds, 544, 583, 578, these could be outliers since they are very far from the 0 line  
+Large residuals tell us that there could indicate that either the variance is not constant (heterosceadasticity) or the true relationship between the variables is non linear  
+While there is a slight variance we could try transforming the data and see if the model is improved  
+
+#### Transforming using log(n)
+Here we try transforming to try and get a better variance  
+```{r}
+new_df <- complete_df
+new_df$timeTaken <- log(new_df$timeTaken)
+new_df <- new_df[is.finite(rowSums(new_df)),]
+
+lm_fare_trip_transf <- lm(timeTaken~fare_amount+trip_distance, data=new_df)
+summary(lm_fare_trip_transf)
+```
+As you can see the transformation has not helped the model at all, in fact it has made our model worse with an 67.7% variability now while before we had a 90.6% variability  
+Therefore, we will choose not to transform it as our previous model before transforming seems to be more significant
+
+#### Checking Distribution of Residuals
+```{r}
+hist(resid(lm_fare_trip))
+```
+As you can see from the histogram the residuals are normally distributed which is a good thing  
+We can also see on the left tail that there are outliers, but on the most part it is normally distributed
+
+#### Checking F-stat with f-dist value
+```{r}
+summary(lm_fare_trip)
+qf(0.95, 2, 497)
+```
+F-stat is > 3.014 with 2411 so we can proceed to reject the null hypothesis and say that it is statistically significant  
+
+# Conclusion
+In the statistical analysis I have used Correlation Tests, Anova, Simple Linear Regression, and Multiple Linear Regression. 
+After using simple linear regression to model all the variables individually with the time taken as the predictor variable to see which models are significant and can be expanded on by using the MLR model. I then tested the correlations for these variables with time taken to see which or if any variables has high correlation and could create noise in MLR model when combined. I then tested the correlations between the independent variables to see if there exists any multicolinearity as this could add noise to our model. Correlation between some independent variables was extremely high, however, adding these variables together in the model helped its overall accuracy as we saw with the r squared value and other diagnostic methods I applied when checking the goodness of the model. I also run some other diagnostics to check the linear relationship of the variables such plotting a scatterplot of the variable with the most significance and added a linear regression line to it to see how well it fits the data, so that I can visually observe. After the diagnostics of the simple linear regression, we then move onto the multiple linear regression portion of this and we start with the variable with most significant model and add other variables to it to see which combination provides us with the most accurate model. The MLR model that shows the most significance, with a good p-value, high r squared value, high f-stat, and normally distributed residuals, that I found was when time taken is predicted by fare amount, total amount, trip distance, and tip amount. To check the fit of the MLR model we ran diagnostics such as checking F-stat, checking the distribution of the residuals, checking the residual vs fitted plot to see if the model is actually linear or not. The residual vs fitted plot also showed that the constant variance factor was being violated, however, when I tried to transform using the log(n) method it affected the model negatively, therefore, we did not transform and went ahead using the original model. To conclude we can say that the fare amount, trip distance, total amount, and tip amount as multiple linear regression helps best explain the changes and variability in the time taken for each taxi trip.  
